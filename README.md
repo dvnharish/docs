@@ -145,7 +145,7 @@ graph LR
       A[User Prompt] --> B[OpenAI LLM]
     end
     B --> C[Function Call: MCP Wrapper]
-    C --> D[Multi-call Orchestrator (MCP)]
+    C --> D[Multi-call Orchestrator MCP]
     D --> E[Elavon Agent Toolkit SDK]
     E --> F[Mock Business & Payment Tools]
     F --> G[Response Payload]
