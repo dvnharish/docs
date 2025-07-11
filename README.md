@@ -1,374 +1,165 @@
-# Avvance Developer Workbench
-## Interceptor Strategy & Business Benefits
+# Elavon Agent Toolkit
+
+## Introduction and Purpose
+The **Elavon Agent Toolkit** is a Spring Boot application that provides AI-assisted code generation and mock business operations for Elavon's payment processing APIs.  
+It leverages Spring AI (v1.0.0) to define each operation as a tool with clear metadata, enabling conversational models to invoke them seamlessly.  
+
+This document explains the overall design, individual components, and end-to-end process flows in a structured way, so that stakeholders and product owners can understand how the system works.
 
 ---
 
-## The Opportunity
+## 1. Application Architecture
 
-Modern API-first companies lose significant developer engagement due to poor debugging and monitoring experiences. **Stripe's developer portal generates 40% higher API adoption rates and 60% faster integration times** compared to standard documentation approaches.
-
-**The Market Reality:**
-- 73% of developers abandon API integrations due to poor debugging tools
-- Average time-to-first-successful-call: 4.2 hours with traditional documentation
-- Support tickets for integration issues: 65% of total developer support load
-- Developer churn rate: 45% within first 30 days without proper tooling
-
----
-
-## The Solution
-
-A comprehensive developer portal featuring **real-time API request logging, interactive documentation, and advanced debugging tools** that transform the developer experience from frustrating to delightful.
-
-### Core Value Proposition
-**Transform every API interaction into a learning opportunity through complete transparency and intelligent debugging assistance.**
-
----
-
-## Interceptor Strategy Overview
-
+### 1.1 High-Level Overview
 ```mermaid
-graph TB
-    subgraph "Developer Experience Layer"
-        Portal[Developer Portal<br/>Stripe-inspired Interface]
-        Console[Real-time Console<br/>Live Request/Response Logs]
-        Debugger[Intelligent Debugger<br/>Error Analysis & Solutions]
+graph LR
+  subgraph AI Layer
+    User["User/LLM"] --> ChatClient["ChatClient (Spring AI)"]
+    ChatClient --> ToolCallbacks["ToolCallbacks Registry"]
+  end
+
+  subgraph Toolkit Layer
+    ToolCallbacks --> ElavonTools["ElavonTools Registry"]
+    subgraph Tools
+      ElavonTools --> TransactionTool
+      ElavonTools --> OrderTool
+      ElavonTools --> AccountTool
+      ElavonTools --> BatchTool
+      ElavonTools --> PaymentLinkTool
+      ElavonTools --> PaymentSessionTool
+      ElavonTools --> SubscriptionsTool
+      ElavonTools --> ShoppersTool
+      ElavonTools --> PlansTool
+      ElavonTools --> StoredCardTool
+      ElavonTools --> MerchantProcessorAccountTool
+      ElavonTools --> NotificationsTool
     end
-    
-    subgraph "Interceptor Intelligence Layer"
-        Interceptor[Interceptor Service<br/>Strategic Position]
-        Analyzer[Request/Response Analyzer<br/>Pattern Recognition]
-        Intelligence[AI-Powered Intelligence<br/>Solution Generation]
-    end
-    
-    subgraph "Avvance API Layer"
-        Gateway[API Gateway]
-        Services[Microservices<br/>Loan, Reporting, Webhooks]
-    end
-    
-    Portal --> Interceptor
-    Console <--> Interceptor
-    Debugger <--> Analyzer
-    Interceptor --> Analyzer
-    Analyzer --> Intelligence
-    Interceptor --> Gateway
-    Gateway --> Services
-    
-    classDef experience fill:#4A90E2,stroke:#2E5C8A,color:#fff
-    classDef intelligence fill:#50C878,stroke:#2E7D32,color:#fff
-    classDef api fill:#9C27B0,stroke:#4A148C,color:#fff
-    
-    class Portal,Console,Debugger experience
-    class Interceptor,Analyzer,Intelligence intelligence
-    class Gateway,Services api
+  end
+```
+- **ChatClient**: Entry point for AI interactions.  
+- **ToolCallbacks**: Adapts each tool class into a callback the AI can call.  
+- **ElavonTools**: Central registry that holds references to all specialized tools.  
+- **Tool Classes**: Provide specific functionality (code generation or mock operations).
+
+---
+
+## 2. Key Components and Responsibilities
+
+### 2.1 ChatClient & ToolCallbacks
+- **ChatClient**: Manages prompts and AI responses.  
+- **ToolCallbacks**: Uses `ToolCallbacks.from(...)` to register each tool class so the AI can invoke methods directly.  
+
+### 2.2 ElavonTools Registry
+- **Purpose**: Constructor-injected with each tool.  
+- **Exposed Methods**: Accessors like `getTransactionTool()` return the appropriate tool instance.  
+- **SDK Info**: `getSdkVersion()` and `getLanguageSdkInfo(lang)` provide versioning and language capabilities to the AI.
+
+### 2.3 Individual Tool Classes
+Each tool is a `@Component` with `@Tool` and `@ToolParam` annotations:
+- **Code Generators** (Transaction, Order, Account, Batch, PaymentLink):  
+  - `generateXYZCode(language, operation, style, alias, secret)`  
+  - Delegates to SDK-specific generators (Java, Python, C#, etc.).  
+- **Mock Business Tools** (Account, PaymentSession, Subscriptions, Shoppers, Plans, StoredCard, MerchantProcessorAccount, Notifications):  
+  - CRUD-like methods returning JSON-mocked responses.  
+  - Useful for demonstration and initial integration tests without real API calls.
+
+---
+
+## 3. Process Flows
+
+### 3.1 Code Generation Flow
+```mermaid
+sequenceDiagram
+  participant User
+  participant ChatClient
+  participant ToolCallbacks
+  participant ElavonTools
+  participant GeneratorTool
+  participant SDK
+
+  User->>ChatClient: "Generate Java code for getTransactions"
+  ChatClient->>ToolCallbacks: Tool callback invocation
+  ToolCallbacks->>ElavonTools: fetch TransactionTool
+  ElavonTools->>GeneratorTool: generateTransactionCode("java","getTransactions",...)
+  GeneratorTool->>SDK: generateCode(alias, secret, "resttemplate", "getTransactions")
+  SDK-->>GeneratorTool: return code snippet
+  GeneratorTool-->>ToolCallbacks: respond with JSON
+  ToolCallbacks-->>ChatClient: return to AI model
+  ChatClient-->>User: display generated code
 ```
 
+### 3.2 Account Management Flow (Mock)
+1. AI triggers `createAccount(merchantId, type, currency, ...)`.  
+2. `AccountTool.createAccount(...)` constructs a JSON response with `accountId`.  
+3. AI receives `{status:success,message:...,accountId:...}`.
+
+Repeat for `getAccountById`, `updateAccount`, `deleteAccount`, `getAccountBalance`.
+
 ---
 
-## Strategic Benefits
+## 4. Security & Compliance
+- **U.S. Banking Protocols**: Designed per FFIEC & PCI DSS guidelines.  
+- **Secure Transport**: Enforce TLS 1.2+ for all communications.  
+- **Credential Management**: Alias/secret must be stored in a secure vault (HashiCorp Vault, AWS Secrets Manager).  
+- **Logging & Monitoring**: Sensitive data redaction and audit logs required.
 
-### 1. Complete Transparency
-**No Black Box Development**
+---
 
-| Benefit | Impact | Measurement |
-|---------|--------|-------------|
-| **Real-time Visibility** | Immediate feedback on every API call | 100% request/response capture |
-| **Historical Tracking** | Complete audit trail of all interactions | Full correlation tracking |
-| **Context Preservation** | All relevant information captured | Zero data loss |
-| **Debug Acceleration** | Faster issue identification and resolution | 80% reduction in debug time |
+## 5. Getting Started
 
-**Business Impact:**
-- **Developer Satisfaction**: 4.5/5 average rating (industry standard: 2.8/5)
-- **Time to Integration**: 45 minutes average (industry standard: 4.2 hours)
-- **Support Ticket Reduction**: 70% fewer integration-related tickets
+### Prerequisites
+- Java 17+  
+- Maven 3.6+  
 
-### 2. Self-Service Debugging
-**Empowering Developer Independence**
-
-```mermaid
-flowchart LR
-    Error[API Error Occurs] --> Capture[Interceptor Captures<br/>Complete Context]
-    Capture --> Analysis[AI Analysis<br/>Pattern Recognition]
-    Analysis --> Solution[Generate Solution<br/>Recommendations]
-    Solution --> Developer[Developer Receives<br/>Actionable Guidance]
-    Developer --> Resolution[Self-Service<br/>Resolution]
-    
-    classDef process fill:#FF6B6B,stroke:#C62828,color:#fff
-    classDef intelligence fill:#4CAF50,stroke:#2E7D32,color:#fff
-    classDef outcome fill:#2196F3,stroke:#1565C0,color:#fff
-    
-    class Error,Capture process
-    class Analysis,Solution intelligence
-    class Developer,Resolution outcome
+### Build & Run
+```bash
+mvn clean install
+mvn spring-boot:run
 ```
-
-**Key Capabilities:**
-- **Immediate Error Context**: Developers see exactly what went wrong
-- **Actionable Information**: Specific details about failures with suggested fixes
-- **Pattern Recognition**: Identify recurring issues automatically
-- **Solution Suggestions**: AI-powered recommendations based on error patterns
-
-**ROI Metrics:**
-- **Support Cost Reduction**: $500K annually (70% fewer tickets × $15 average resolution cost)
-- **Developer Productivity**: 3x faster issue resolution
-- **Integration Success Rate**: 95% (up from 55%)
-
-### 3. Zero Support Dependency
-**Breaking the Support Bottleneck**
-
-| Traditional Approach | Interceptor Strategy | Improvement |
-|---------------------|---------------------|-------------|
-| Developer hits error → Opens ticket | Developer hits error → Sees solution | **Instant resolution** |
-| Wait 4-24 hours for response | Immediate actionable feedback | **24x faster** |
-| Back-and-forth troubleshooting | Self-service debugging tools | **Zero back-and-forth** |
-| 65% of tickets are integration issues | 15% of tickets are integration issues | **77% reduction** |
+- Application listens on port `8080` by default.
 
 ---
 
-## Technical Architecture
+## 6. Testing & Extensibility
+- **Unit Tests**: Add tests under `src/test/java`.  
+- **Add New Tool**:  
+  1. Create a new `@Component` with `@Tool` methods.  
+  2. Inject into `ElavonTools` constructor.  
+  3. Update `ToolConfig` if using explicit callbacks.  
 
-### Strategic Positioning
-**The interceptor sits at the perfect vantage point:**
+---
+
+## 7. Version & Licensing
+- **Version**: 1.0.0  
+- **License**: Proprietary and confidential.
+
+*Documentation generated for product owner clarity.*
+
+## Data Flow: Copilot to SDK and Back
+
+Below is a data flow diagram showing how information travels from VS Code Copilot Chat through the multi-call orchestrator (MCP) to the Elavon Agent Toolkit SDK and back to the user.
 
 ```mermaid
 graph LR
-    Dev[Developer] --> Portal[Developer Portal]
-    Portal --> Interceptor[🎯 Interceptor<br/>Strategic Position]
-    Interceptor --> API[Avvance APIs]
-    
-    Interceptor -.-> Analytics[Real-time Analytics]
-    Interceptor -.-> Logs[Structured Logs]
-    Interceptor -.-> Intelligence[AI Intelligence]
-    
-    classDef strategic fill:#FF9800,stroke:#E65100,color:#fff
-    classDef endpoint fill:#9C27B0,stroke:#4A148C,color:#fff
-    classDef intelligence fill:#4CAF50,stroke:#2E7D32,color:#fff
-    
-    class Interceptor strategic
-    class Dev,Portal,API endpoint
-    class Analytics,Logs,Intelligence intelligence
+    subgraph "VS Code Copilot Chat"
+      A[User Prompt] --> B[OpenAI LLM]
+    end
+    B --> C[Function Call: MCP Wrapper]
+    C --> D[Multi-call Orchestrator (MCP)]
+    D --> E[Elavon Agent Toolkit SDK]
+    E --> F[Mock Business & Payment Tools]
+    F --> G[Response Payload]
+    G --> D
+    D --> H[Aggregated Function Responses]
+    H --> B[LLM Receives Responses]
+    B --> I[Model-Generated Response]
+    I --> J[Copilot Chat UI]
 ```
-
-### Request Interception Capabilities
-
-#### Data Capture
-**Complete Request Intelligence**
-- ✅ HTTP method, URL, and all parameters
-- ✅ Complete header collection (including auth headers)
-- ✅ Request body content and format validation
-- ✅ API keys and authentication verification
-- ✅ Environment context (sandbox/staging/production)
-- ✅ Developer session and workspace tracking
-
-#### Processing & Enhancement
-**Real-time Request Intelligence**
-- 🔍 **Request Validation**: Against OpenAPI specifications
-- 🎯 **Parameter Optimization**: Formatting and type checking
-- 🔐 **Security Verification**: Authentication and authorization
-- 📊 **Usage Tracking**: Rate limiting and quota monitoring
-- 🛡️ **Security Scanning**: Vulnerability detection
-
-#### Logging & Streaming
-**Intelligent Data Pipeline**
-- 📝 **Structured Logging**: Rich metadata capture
-- ⚡ **Real-time Streaming**: Instant developer feedback
-- 🗄️ **Smart Storage**: Optimized for search and analysis
-- 🔍 **Advanced Search**: Query capabilities for debugging
-
-### Response Interception Capabilities
-
-#### Data Capture
-**Complete Response Intelligence**
-- 📊 HTTP status codes and response headers
-- 📄 Complete response body content analysis
-- ⏱️ Response timing and performance metrics
-- ❌ Detailed error analysis and classification
-- ✅ Success/failure pattern recognition
-
-#### Analysis & Intelligence
-**AI-Powered Response Analysis**
-
-```mermaid
-graph TB
-    Response[API Response] --> Classifier[Error Classifier<br/>Smart Categorization]
-    Classifier --> RootCause[Root Cause Analysis<br/>Pattern Matching]
-    RootCause --> Performance[Performance Analysis<br/>Bottleneck Detection]
-    Performance --> Patterns[Pattern Recognition<br/>Historical Analysis]
-    Patterns --> Solutions[Solution Generation<br/>AI Recommendations]
-    
-    classDef analysis fill:#2196F3,stroke:#1565C0,color:#fff
-    classDef intelligence fill:#4CAF50,stroke:#2E7D32,color:#fff
-    
-    class Response,Classifier,RootCause,Performance analysis
-    class Patterns,Solutions intelligence
-```
-
-**Intelligence Features:**
-- 🧠 **Error Classification**: Automatic categorization of failures
-- 🔍 **Root Cause Analysis**: Deep dive into failure reasons
-- 📈 **Performance Intelligence**: Bottleneck identification
-- 🎯 **Pattern Recognition**: Historical trend analysis
-- 💡 **Solution Generation**: AI-powered fix recommendations
-
-#### Feedback & Streaming
-**Real-time Developer Assistance**
-- ⚡ Real-time error analysis delivery
-- 🔧 Suggested fixes and remediation steps
-- 🚀 Performance optimization recommendations
-- 📊 Historical pattern analysis and trends
-- 🎓 Learning resources and documentation links
-
----
-
-## Business Impact Analysis
-
-### Revenue Impact
-**Direct Revenue Growth**
-
-| Metric | Current State | With Interceptor | Improvement | Annual Value |
-|--------|---------------|------------------|-------------|--------------|
-| **Developer Adoption Rate** | 45% | 75% | +67% | $2.3M additional revenue |
-| **Time to First Success** | 4.2 hours | 45 minutes | -82% | $890K in developer productivity |
-| **Integration Success Rate** | 55% | 95% | +73% | $1.8M in retained partnerships |
-| **Developer Retention** | 55% | 87% | +58% | $1.2M in lifetime value |
-
-### Cost Reduction
-**Operational Efficiency**
-
-| Cost Center | Annual Cost | Reduction | Savings |
-|-------------|-------------|-----------|---------|
-| **Developer Support** | $750K | 70% | $525K |
-| **Technical Writing** | $200K | 40% | $80K |
-| **Partner Onboarding** | $400K | 60% | $240K |
-| **Integration Failures** | $300K | 80% | $240K |
-| **Total Annual Savings** | | | **$1.085M** |
-
-### Strategic Advantages
-**Market Positioning**
-
-1. **Developer Experience Leader**
-   - Industry-leading developer portal
-   - Competitive differentiation
-   - Developer advocacy and word-of-mouth growth
-
-2. **Reduced Friction**
-   - Faster partner onboarding
-   - Higher integration success rates
-   - Lower barrier to entry
-
-3. **Data-Driven Insights**
-   - Usage analytics and patterns
-   - API optimization opportunities
-   - Product development insights
-
----
-
-## Implementation Roadmap
-
-### Phase 1: Core Interceptor (4 weeks)
-**Foundation & Basic Functionality**
-- ✅ Basic request/response interception
-- ✅ Real-time WebSocket streaming
-- ✅ Simple developer portal interface
-- ✅ Basic logging and correlation
-
-**Success Metrics:**
-- 100% request capture rate
-- Sub-100ms interception overhead
-- Real-time log delivery
-
-### Phase 2: Intelligence Layer (6 weeks)
-**AI-Powered Analysis & Solutions**
-- 🧠 Error classification and analysis
-- 💡 Solution recommendation engine
-- 📊 Pattern recognition system
-- 🎯 Performance optimization suggestions
-
-**Success Metrics:**
-- 80% accurate error classification
-- 70% of solutions resolve issues
-- 90% developer satisfaction with recommendations
-
-### Phase 3: Advanced Features (4 weeks)
-**Enhanced Developer Experience**
-- 🔍 Advanced search and filtering
-- 📈 Analytics dashboards
-- 🎓 Interactive tutorials
-- 📊 Usage analytics and insights
-
-**Success Metrics:**
-- 95% developer adoption of advanced features
-- 4.5/5 developer experience rating
-- 60% reduction in time-to-integration
-
----
-
-## Competitive Analysis
-
-### Stripe vs. Avvance Opportunity
-
-| Feature | Stripe | Traditional APIs | Avvance Interceptor |
-|---------|--------|------------------|---------------------|
-| **Real-time Debugging** | ✅ Excellent | ❌ None | ✅ Superior |
-| **Error Intelligence** | ⚠️ Basic | ❌ None | ✅ AI-Powered |
-| **Self-Service Resolution** | ✅ Good | ❌ Poor | ✅ Excellent |
-| **Historical Analytics** | ✅ Good | ❌ None | ✅ Advanced |
-| **Interactive Documentation** | ✅ Excellent | ⚠️ Static | ✅ Dynamic |
-
-**Competitive Advantage:**
-- **Beyond Stripe**: AI-powered error resolution
-- **Market First**: Real-time request intelligence
-- **Developer Delight**: Zero-friction debugging experience
-
----
-
-## ROI Summary
-
-### Investment
-- **Development Cost**: $400K (12 weeks × 4 developers)
-- **Infrastructure Cost**: $50K annually
-- **Maintenance Cost**: $100K annually
-- **Total Year 1 Investment**: $550K
-
-### Return
-- **Revenue Growth**: $6.2M annually
-- **Cost Savings**: $1.085M annually
-- **Total Annual Return**: $7.285M
-
-### ROI Calculation
-**Return on Investment: 1,224%**
-**Payback Period: 1.1 months**
-
----
-
-## Success Metrics & KPIs
-
-### Developer Experience Metrics
-- **Developer Satisfaction Score**: Target 4.5/5 (vs. industry 2.8/5)
-- **Time to First Successful Call**: Target 45 minutes (vs. industry 4.2 hours)
-- **Integration Success Rate**: Target 95% (vs. current 55%)
-- **Developer Retention Rate**: Target 87% (vs. current 55%)
-
-### Operational Metrics
-- **Support Ticket Reduction**: Target 70% reduction
-- **Request Interception Accuracy**: Target 99.9%
-- **Real-time Delivery**: Target 99% of logs delivered instantly
-- **System Uptime**: Target 99.9% availability
-
-### Business Metrics
-- **API Adoption Rate**: Target 75% (vs. current 45%)
-- **Partner Onboarding Speed**: Target 60% faster
-- **Revenue per Developer**: Target 67% increase
-- **Cost per Integration**: Target 80% reduction
-
----
-
-## Conclusion
-
-The Avvance Developer Workbench with intelligent interceptor strategy represents a **transformative investment** in developer experience that delivers:
-
-🚀 **1,224% ROI** with 1.1-month payback period
-💰 **$7.3M annual value** through revenue growth and cost savings
-🏆 **Market leadership** in developer experience
-⚡ **Competitive advantage** through AI-powered debugging
-
-**This is not just a developer tool—it's a strategic business accelerator that transforms every API interaction into a competitive advantage.**
++ **Explanation of Data Flow**
++
++ 1. **User Prompt → LLM**: The user enters a question in VS Code Copilot Chat. The extension packages your prompt, conversation history, and the available tool definitions, then sends it to OpenAI’s API.
++ 2. **LLM → Function Call**: The language model determines if it needs additional context or code-level information. If so, it emits a JSON function call invoking the MCP wrapper with specific sub-calls.
++ 3. **MCP Orchestrator → SDK**: The multi-call orchestrator executes all requested operations (e.g., file reads, code searches) in parallel, directing them into the Elavon Agent Toolkit SDK.
++ 4. **SDK → Tools**: Inside the SDK, the relevant tool classes (TransactionTool, OrderTool, etc.) handle the mock business or payment logic and produce a structured response payload.
++ 5. **Tools → MCP → LLM**: The SDK returns its individual responses back to the orchestrator. The MCP aggregates these function results and forwards them to the LLM as function responses.
++ 6. **LLM → Chat UI**: Finally, the LLM processes both your original prompt and the aggregated function data to craft a single, coherent reply, which is rendered in the Copilot Chat UI for the user.
